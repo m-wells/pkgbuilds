@@ -127,11 +127,13 @@ jobs:
           fi
 
           # Copy and sign newly built packages
-          for pkg in */*.pkg.tar.zst; do
-            if [ -f "$pkg" ]; then
-              cp "$pkg" repo/
-              gpg --batch --yes --detach-sign --no-armor "repo/$(basename $pkg)"
-            fi
+          for pkgdir in ${{ steps.changes.outputs.all }}; do
+            for pkg in "$pkgdir"/*.pkg.tar.zst; do
+              if [ -f "$pkg" ]; then
+                cp "$pkg" repo/
+                gpg --batch --yes --detach-sign --no-armor "repo/$(basename $pkg)"
+              fi
+            done
           done
 
           # Rename files with colons (GitHub converts : to . in asset names)
