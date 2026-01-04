@@ -22,7 +22,7 @@ jobs:
         run: |
           # Update system and install dependencies
           pacman -Syu --noconfirm
-          pacman -S --noconfirm jq npm fuse2 zlib
+          pacman -S --noconfirm jq npm fuse2 zlib github-cli
 
           # Create non-root builder user
           useradd -m builder
@@ -81,29 +81,13 @@ jobs:
           echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
           echo "Changed packages:$PACKAGES"
 
-      - name: Download existing packages
+      - name: Download existing repo database
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          mkdir -p existing
-
-          # Get list of assets from latest release
-          ASSETS=$(curl -sL "https://api.github.com/repos/${{ github.repository }}/releases/tags/latest" | \
-            grep '"name":' | grep '\.pkg\.tar\.zst' | sed 's/.*"name": "\(.*\)".*/\1/')
-
+          mkdir -p repo
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/latest"
-
-          for pkg in ${{ steps.changes.outputs.all }}; do
-            if ! echo "${{ steps.changes.outputs.packages }}" | grep -q "$pkg"; then
-              echo "Downloading existing $pkg packages..."
-              for asset in $ASSETS; do
-                if echo "$asset" | grep -q "^${pkg}"; then
-                  echo "  -> $asset"
-                  curl -sL -f "${RELEASE_URL}/${asset}" -o "existing/${asset}" || true
-                fi
-              done
-            fi
-          done
-          ls -la existing/ 2>/dev/null || echo "No existing packages to download"
+          curl -sL -f "${RELEASE_URL}/m-wells.db.tar.gz" -o repo/m-wells.db.tar.gz || echo "No existing database"
+          curl -sL -f "${RELEASE_URL}/m-wells.files.tar.gz" -o repo/m-wells.files.tar.gz || true
 
       - name: Build changed packages
         run: |
@@ -114,18 +98,12 @@ jobs:
             fi
           done
 
-      - name: Sign packages and create repo
+      - name: Sign packages and update repo database
         run: |
           mkdir -p repo
 
-          # Copy existing unchanged packages (already signed)
-          if [ -d existing ] && [ "$(ls -A existing 2>/dev/null)" ]; then
-            cp existing/*.pkg.tar.zst repo/ 2>/dev/null || true
-            cp existing/*.pkg.tar.zst.sig repo/ 2>/dev/null || true
-          fi
-
           # Copy and sign newly built packages
-          for pkgdir in ${{ steps.changes.outputs.all }}; do
+          for pkgdir in ${{ steps.changes.outputs.packages }}; do
             for pkg in "$pkgdir"/*.pkg.tar.zst; do
               if [ -f "$pkg" ]; then
                 cp "$pkg" repo/
@@ -135,45 +113,22 @@ jobs:
           done
 
           # Rename files with colons (GitHub converts : to . in asset names)
-          for pkg in repo/*:*; do
-            [ -f "$pkg" ] && mv "$pkg" "$(echo $pkg | tr ':' '.')"
+          for f in repo/*:*; do
+            [ -f "$f" ] && mv "$f" "$(echo $f | tr ':' '.')"
           done
 
-          # Create and sign repo database
+          # Update repo database (adds new packages to existing database)
           cd repo
           repo-add --sign --key ${{ secrets.GPG_KEY_ID }} m-wells.db.tar.gz *.pkg.tar.zst
 
-      - name: Delete outdated assets
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          # Get release info
-          RELEASE_DATA=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/latest")
-
-          RELEASE_ID=$(echo "$RELEASE_DATA" | jq -r '.id // empty')
-
-          if [ -z "$RELEASE_ID" ]; then
-            echo "No existing release found"
-            exit 0
-          fi
-
-          echo "Found release ID: $RELEASE_ID"
-
-          # Delete assets that will be replaced
-          for file in repo/*; do
-            filename=$(basename "$file")
-            ASSET_ID=$(echo "$RELEASE_DATA" | jq -r --arg name "$filename" '.assets[] | select(.name == $name) | .id // empty')
-            if [ -n "$ASSET_ID" ]; then
-              echo "Deleting old asset: $filename"
-              curl -s -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                "https://api.github.com/repos/${{ github.repository }}/releases/assets/$ASSET_ID"
-            fi
-          done
-
       - name: Upload to release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          files: repo/*
-          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create release if it doesn't exist
+          gh release view latest --repo ${{ github.repository }} || \
+            gh release create latest --repo ${{ github.repository }} --title "Packages" --notes "Arch Linux binary packages"
+
+          # Upload files, overwriting any existing
+          gh release upload latest repo/* --repo ${{ github.repository }} --clobber
