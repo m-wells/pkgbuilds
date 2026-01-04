@@ -60,10 +60,8 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
           else
-            git log --oneline -3 || echo "git log failed"
-            CHANGED=$(git diff --name-only HEAD~1 HEAD 2>&1) || echo "git diff failed: $CHANGED"
+            CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
           fi
-          echo "Changed files: $CHANGED"
 
           # Determine which packages changed
           PACKAGES=""
