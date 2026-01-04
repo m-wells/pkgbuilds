@@ -26,6 +26,9 @@ jobs:
           pacman -Syu --noconfirm
           pacman -S --noconfirm git npm fuse2 zlib
 
+          # Mark workspace as safe for git (container filesystem boundary)
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
           # Create non-root builder user
           useradd -m builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
