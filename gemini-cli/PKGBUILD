@@ -3,6 +3,7 @@ pkgname=gemini-cli
 pkgver=0.22.5
 # renovate: datasource=npm depName=@google/gemini-cli
 pkgrel=1
+epoch=1
 pkgdesc="Open-source AI agent that brings the power of Gemini directly into your terminal"
 arch=('any')
 url="https://github.com/google-gemini/gemini-cli"
