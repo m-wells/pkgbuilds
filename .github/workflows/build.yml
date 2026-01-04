@@ -63,13 +63,15 @@ jobs:
           # Get release ID and delete if exists
           RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/releases/tags/latest" | \
-            grep '"id":' | head -1 | grep -o '[0-9]*')
+            grep '"id":' | head -1 | grep -o '[0-9]*' || echo "")
           if [ -n "$RELEASE_ID" ]; then
+            echo "Deleting release $RELEASE_ID"
             curl -s -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
-            # Delete the tag too
             curl -s -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               "https://api.github.com/repos/${{ github.repository }}/git/refs/tags/latest" || true
+          else
+            echo "No existing release found"
           fi
 
       - name: Upload to release
