@@ -7,12 +7,14 @@ pkgdesc="Raspberry Pi Imaging Utility (AppImage)"
 arch=('x86_64')
 url="https://github.com/raspberrypi/rpi-imager"
 license=('Apache-2.0')
-depends=('fuse2' 'zlib' 'hicolor-icon-theme')
+depends=('fuse2' 'zlib' 'hicolor-icon-theme' 'polkit')
 provides=('rpi-imager')
 conflicts=('rpi-imager')
 options=('!strip' '!debug')
-source=("Raspberry_Pi_Imager-v${pkgver}-desktop-x86_64.AppImage::https://github.com/raspberrypi/rpi-imager/releases/download/v${pkgver}/Raspberry_Pi_Imager-v${pkgver}-desktop-x86_64.AppImage")
-sha256sums=('df1f22628d4a9e0c5cf404dc48cbd31fd38a1b676d70505e23a7c866b24935ab')
+source=("Raspberry_Pi_Imager-v${pkgver}-desktop-x86_64.AppImage::https://github.com/raspberrypi/rpi-imager/releases/download/v${pkgver}/Raspberry_Pi_Imager-v${pkgver}-desktop-x86_64.AppImage"
+        "com.raspberrypi.rpi-imager.policy::https://raw.githubusercontent.com/raspberrypi/rpi-imager/v${pkgver}/debian/com.raspberrypi.rpi-imager.policy")
+sha256sums=('df1f22628d4a9e0c5cf404dc48cbd31fd38a1b676d70505e23a7c866b24935ab'
+            'f998b4c8da419da3a453a3b8992397fb4b8687b7155eda1c79aa0d7a0eb4e524')
 noextract=("Raspberry_Pi_Imager-v${pkgver}-desktop-x86_64.AppImage")
 
 package() {
@@ -46,4 +48,8 @@ EOF
     install -Dm644 squashfs-root/rpi-imager.png \
       "${pkgdir}/usr/share/icons/hicolor/256x256/apps/${pkgname}.png"
   fi
+
+  # Install polkit policy for privilege elevation
+  install -Dm644 "${srcdir}/com.raspberrypi.rpi-imager.policy" \
+    "${pkgdir}/usr/share/polkit-1/actions/com.raspberrypi.rpi-imager.policy"
 }
