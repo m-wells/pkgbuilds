@@ -18,6 +18,14 @@ pkg/
 *.swp
 *~
 .vscode/
+.idea/
+
+# AI context files
+CLAUDE.md
+GEMINI.md
+COPILOT.md
+.cursorrules
+.cursor/
 
 # npm cache (from builds)
 npm-cache/
