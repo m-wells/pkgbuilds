@@ -144,6 +144,28 @@ jobs:
             echo "Failed packages:$FAILED"
           fi
 
+      - name: Smoke test packages
+        if: steps.changes.outputs.packages != ''
+        run: |
+          for pkgdir in ${{ steps.changes.outputs.packages }}; do
+            for pkg in "$pkgdir"/*.pkg.tar.zst; do
+              [ -f "$pkg" ] || continue
+              echo "==> Testing $pkg"
+              pacman -U --noconfirm "$pkg"
+            done
+
+            # Package-specific smoke tests
+            case "$pkgdir" in
+              gemini-cli)
+                gemini-cli --version
+                ;;
+              rpi-imager)
+                # GUI app - just verify binary is executable
+                test -x /opt/rpi-imager/rpi-imager.AppImage
+                ;;
+            esac
+          done
+
       - name: Sign packages and update repo database
         if: steps.changes.outputs.packages != ''
         run: |
