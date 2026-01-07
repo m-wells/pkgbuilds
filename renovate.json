@@ -9,7 +9,7 @@
   "postUpgradeTasks": {
     "commands": [
       "sed -i 's/pkgrel=.*/pkgrel=1/' {{{packageFile}}}",
-      "cd $(dirname {{{packageFile}}}) && updpkgsums"
+      "bash scripts/update-checksums.sh {{{packageFile}}}"
     ],
     "fileFilters": ["**/PKGBUILD"],
     "executionMode": "update"
