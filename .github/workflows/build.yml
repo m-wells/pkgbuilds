@@ -53,12 +53,12 @@ jobs:
           # 1. Download and Extract Database
           mkdir -p repo
           echo "Downloading repository database..."
-          if ! gh release download latest --repo ${{ github.repository }} --pattern 'mark-wells-dev.db.tar.gz' --dir repo;
+          if ! gh release download latest --repo ${{ github.repository }} --pattern 'mark-wells-dev.db.tar.gz' --dir repo; then
             echo "New DB not found, trying legacy 'm-wells.db'..."
-            if gh release download latest --repo ${{ github.repository }} --pattern 'm-wells.db.tar.gz' --dir repo;
+            if gh release download latest --repo ${{ github.repository }} --pattern 'm-wells.db.tar.gz' --dir repo; then
               mv repo/m-wells.db.tar.gz repo/mark-wells-dev.db.tar.gz
               # Also try to get the files db if it exists
-              if gh release download latest --repo ${{ github.repository }} --pattern 'm-wells.files.tar.gz' --dir repo;
+              if gh release download latest --repo ${{ github.repository }} --pattern 'm-wells.files.tar.gz' --dir repo; then
                 mv repo/m-wells.files.tar.gz repo/mark-wells-dev.files.tar.gz
               fi
             else
