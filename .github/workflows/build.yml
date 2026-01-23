@@ -20,277 +20,106 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: write
-
 jobs:
-  build:
+  prepare:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
-
+    outputs:
+      matrix: ${{ steps.scan.outputs.matrix }}
+      removed: ${{ steps.scan.outputs.removed }}
+      run_publish: ${{ steps.scan.outputs.run_publish }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - name: Setup build environment
-        run: |
-          # Update system and install dependencies
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm npm fuse2 zlib github-cli
+      - name: Setup environment
+        run: ./scripts/ci/setup.sh
 
-          # Create non-root builder user
-          useradd -m builder
-          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-          chown -R builder:builder .
-
-          # Grant builder access to the checkout
-          chown -R builder:builder .
-
-      - name: Check package versions
-        id: changes
+      - name: Prepare build matrix
+        id: scan
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # 1. Download and Extract Database
-          mkdir -p repo
-          echo "Downloading repository database..."
-          if ! gh release download latest --repo ${{ github.repository }} --pattern 'mark-wells-dev.db.tar.gz' --dir repo; then
-            echo "New DB not found, trying legacy 'm-wells.db'..."
-            if gh release download latest --repo ${{ github.repository }} --pattern 'm-wells.db.tar.gz' --dir repo; then
-              mv repo/m-wells.db.tar.gz repo/mark-wells-dev.db.tar.gz
-              # Also try to get the files db if it exists
-              if gh release download latest --repo ${{ github.repository }} --pattern 'm-wells.files.tar.gz' --dir repo; then
-                mv repo/m-wells.files.tar.gz repo/mark-wells-dev.files.tar.gz
-              fi
-            else
-              echo "No existing database found."
-            fi
-          else
-            gh release download latest --repo ${{ github.repository }} --pattern 'mark-wells-dev.files.tar.gz' --dir repo || true
-          fi
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
+          FIX_SIGNATURES: ${{ inputs.fix_signatures }}
+        run: ./scripts/ci/prepare.sh
 
-          mkdir -p repo/db_content
-          if [ -f repo/mark-wells-dev.db.tar.gz ]; then
-            tar -xf repo/mark-wells-dev.db.tar.gz -C repo/db_content
-          fi
+      - name: Upload Repository DB
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-db
+          path: repo/
+          compression-level: 0
 
-          # 2. Build map of current DB versions
-          touch db_versions.txt
-          find repo/db_content -name desc | while read -r desc_file; do
-             name=$(grep -A1 "%NAME%" "$desc_file" | tail -n1)
-             ver=$(grep -A1 "%VERSION%" "$desc_file" | tail -n1)
-             echo "$name $ver" >> db_versions.txt
-          done
-          echo "Current DB versions:"
-          cat db_versions.txt
+  build:
+    needs: prepare
+    if: ${{ fromJson(needs.prepare.outputs.matrix)[0] != null }}
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
 
-          # 3. Scan local packages
-          ALL_PACKAGES=$(find . -maxdepth 2 -name PKGBUILD -printf '%h\n' | sed 's|^\./||' | sort | tr '\n' ' ' | xargs)
-          echo "Local packages: $ALL_PACKAGES"
+      - name: Setup environment
+        run: ./scripts/ci/setup.sh
 
-          PACKAGES_TO_BUILD=""
+      - name: Build and Test ${{ matrix.package }}
+        run: ./scripts/ci/build.sh ${{ matrix.package }}
 
-          if [ "${{ inputs.force_rebuild }}" = "true" ]; then
-            echo "Force rebuild: building all packages"
-            PACKAGES_TO_BUILD="$ALL_PACKAGES"
-          else
-            for pkg in $ALL_PACKAGES; do
-              # Use makepkg --printsrcinfo for robust parsing
-              # Run as builder user to ensure correct variable expansion/execution
-              echo "Checking $pkg..."
-              
-              if ! srcinfo=$(su builder -c "cd $pkg && makepkg --printsrcinfo" 2>/dev/null); then
-                  echo "::error::Failed to parse PKGBUILD for $pkg"
-                  exit 1
-              fi
-              
-              # Extract version info using regex matching on .SRCINFO format
-              # .SRCINFO keys are usually indented
-              p_name=$(echo "$srcinfo" | grep -P '^\tpkgname =' | cut -d= -f2 | xargs)
-              p_ver=$(echo "$srcinfo" | grep -P '^\tpkgver =' | cut -d= -f2 | xargs)
-              p_rel=$(echo "$srcinfo" | grep -P '^\tpkgrel =' | cut -d= -f2 | xargs)
-              p_epoch=$(echo "$srcinfo" | grep -P '^\tepoch =' | cut -d= -f2 | xargs)
+      - name: Upload Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.package }}
+          path: ${{ matrix.package }}/*.pkg.tar.zst
+          compression-level: 0
 
-              # Verification
-              if [ "$pkg" != "$p_name" ]; then
-                # Handle split packages or mismatch
-                # For now, strict check: directory must match pkgname (or pkgbase if logic tailored)
-                # But makepkg --printsrcinfo outputs pkgbase at top, then pkgname sections.
-                # Simplification: assume simple packages for now or check if pkgname is in output.
-                # If pkgname is different, we might have issues.
-                # Let's trust the directory structure for "name" but use parsed ver for "version".
-                echo "Note: Directory $pkg contains package $p_name"
-              fi
+  publish:
+    needs: [prepare, build]
+    # Run if prepare succeeded, and build either succeeded or was skipped (no work), AND we are told to publish
+    if: |
+      always() && 
+      needs.prepare.result == 'success' && 
+      (needs.build.result == 'success' || needs.build.result == 'skipped') && 
+      needs.prepare.outputs.run_publish == 'true' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
 
-              if [ -n "$p_epoch" ]; then
-                  local_ver="${p_epoch}:${p_ver}-${p_rel}"
-              else
-                  local_ver="${p_ver}-${p_rel}"
-              fi
-
-              db_ver=$(grep "^$pkg " db_versions.txt | cut -d' ' -f2 || echo "")
-
-              if [ -z "$db_ver" ]; then
-                  echo "New package: $pkg ($local_ver)"
-                  PACKAGES_TO_BUILD="$PACKAGES_TO_BUILD $pkg"
-              else
-                  # Use vercmp for robust comparison
-                  cmp_res=$(vercmp "$local_ver" "$db_ver")
-                  if [ "$cmp_res" -ne 0 ]; then
-                      echo "Update needed for $pkg: DB($db_ver) -> Local($local_ver)"
-                      PACKAGES_TO_BUILD="$PACKAGES_TO_BUILD $pkg"
-                  else
-                      echo "$pkg is up to date ($local_ver)"
-                  fi
-              fi
-            done
-          fi
-
-          echo "packages=$PACKAGES_TO_BUILD" >> $GITHUB_OUTPUT
-
-          # 4. Detect removed packages
-          REMOVED=""
-          while read -r line; do
-            [ -z "$line" ] && continue
-            db_name=$(echo "$line" | cut -d' ' -f1)
-            if ! echo "$ALL_PACKAGES" | grep -qw "$db_name"; then
-                echo "Package $db_name is in DB but not local (will be removed)."
-                REMOVED="$REMOVED $db_name"
-            fi
-          done < db_versions.txt
-
-          echo "removed=$REMOVED" >> $GITHUB_OUTPUT
-
-          # 5. Determine work status
-          if [ -n "$PACKAGES_TO_BUILD" ] || [ -n "$REMOVED" ]; then
-             echo "has_work=true" >> $GITHUB_OUTPUT
-          else
-             echo "has_work=false" >> $GITHUB_OUTPUT
-          fi
+      - name: Setup environment
+        run: ./scripts/ci/setup.sh
 
       - name: Import GPG key
-        if: steps.changes.outputs.has_work == 'true' || inputs.fix_signatures == true
         run: echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
 
-      - name: Remove deleted packages from database
-        if: steps.changes.outputs.removed != ''
-        run: |
-          echo "Removing deleted packages:${{ steps.changes.outputs.removed }}"
-          repo-remove --sign --key ${{ secrets.GPG_KEY_ID }} repo/mark-wells-dev.db.tar.gz ${{ steps.changes.outputs.removed }}
+      - name: Download Repository DB
+        uses: actions/download-artifact@v4
+        with:
+          name: repo-db
+          path: repo
 
-      - name: Build changed packages
-        id: build
-        if: steps.changes.outputs.packages != ''
-        run: |
-          FAILED=""
-          for pkg in ${{ steps.changes.outputs.packages }}; do
-            if [ -d "$pkg" ]; then
-              echo "==> Building $pkg"
-              if ! su builder -c "cd $pkg && makepkg -s --noconfirm"; then
-                echo "::error::Failed to build $pkg"
-                FAILED="$FAILED $pkg"
-              fi
-            fi
-          done
-          echo "failed=$FAILED" >> $GITHUB_OUTPUT
-          if [ -n "$FAILED" ]; then
-            echo "Failed packages:$FAILED"
-          fi
+      - name: Download Built Packages
+        # Only download if build job ran
+        if: needs.build.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-*
+          path: repo-artifacts
+          merge-multiple: true
 
-      - name: Smoke test packages
-        if: steps.changes.outputs.packages != ''
-        run: |
-          for pkgdir in ${{ steps.changes.outputs.packages }}; do
-            INSTALLED=false
-            for pkg in "$pkgdir"/*.pkg.tar.zst; do
-              [ -f "$pkg" ] || continue
-              echo "==> Testing $pkg"
-              pacman -U --noconfirm "$pkg"
-              INSTALLED=true
-            done
-
-            # Package-specific smoke tests (only if package was installed)
-            if [ "$INSTALLED" = "true" ]; then
-              case "$pkgdir" in
-                gemini-cli)
-                  /usr/bin/gemini --version
-                  ;;
-                rpi-imager)
-                  # GUI app - just verify binary is executable
-                  test -x /opt/rpi-imager/rpi-imager.AppImage
-                  ;;
-              esac
-            fi
-          done
-
-      - name: Sign packages and update repo database
-        if: steps.changes.outputs.packages != ''
-        run: |
-          # Copy and sign newly built packages
-          for pkgdir in ${{ steps.changes.outputs.packages }}; do
-            for pkg in "$pkgdir"/*.pkg.tar.zst; do
-              if [ -f "$pkg" ]; then
-                cp "$pkg" repo/
-                gpg --batch --yes --detach-sign --no-armor "repo/$(basename $pkg)"
-              fi
-            done
-          done
-
-          # Rename files with colons (GitHub converts : to . in asset names)
-          for f in repo/*:*; do
-            [ -f "$f" ] && mv "$f" "$(echo $f | tr ':' '.')"
-          done
-
-          # Update repo database
-          cd repo
-          if ls *.pkg.tar.zst 1>/dev/null 2>&1; then
-            repo-add --sign --key ${{ secrets.GPG_KEY_ID }} mark-wells-dev.db.tar.gz *.pkg.tar.zst
-            
-            # Ensure signatures for legacy/symlink DB names exist
-            if [ -f mark-wells-dev.db.tar.gz.sig ]; then
-              rm -f mark-wells-dev.db.sig
-              cp mark-wells-dev.db.tar.gz.sig mark-wells-dev.db.sig
-            fi
-            if [ -f mark-wells-dev.files.tar.gz.sig ]; then
-              rm -f mark-wells-dev.files.sig
-              cp mark-wells-dev.files.tar.gz.sig mark-wells-dev.files.sig
-            fi
-          fi
-
-      - name: Fix DB Signatures
-        if: inputs.fix_signatures == true
+      - name: Finalize Repository
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Downloading existing DB files and signatures..."
-          # Download valid compressed DBs and their signatures
-          gh release download latest --repo ${{ github.repository }} --pattern 'mark-wells-dev.db.tar.gz' --dir repo || true
-          gh release download latest --repo ${{ github.repository }} --pattern 'mark-wells-dev.db.tar.gz.sig' --dir repo || true
-          gh release download latest --repo ${{ github.repository }} --pattern 'mark-wells-dev.files.tar.gz' --dir repo || true
-          gh release download latest --repo ${{ github.repository }} --pattern 'mark-wells-dev.files.tar.gz.sig' --dir repo || true
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          REMOVED_JSON: ${{ needs.prepare.outputs.removed }}
+        run: ./scripts/ci/publish.sh
 
-          cd repo
-          # Synchronize uncompressed/symlink names to match compressed versions
-          if [ -f mark-wells-dev.db.tar.gz ]; then
-             echo "Synchronizing mark-wells-dev.db with mark-wells-dev.db.tar.gz"
-             cp mark-wells-dev.db.tar.gz mark-wells-dev.db
-          fi
-          if [ -f mark-wells-dev.files.tar.gz ]; then
-             echo "Synchronizing mark-wells-dev.files with mark-wells-dev.files.tar.gz"
-             cp mark-wells-dev.files.tar.gz mark-wells-dev.files
-          fi
-
-          # Synchronize signatures
-          if [ -f mark-wells-dev.db.tar.gz.sig ]; then
-             echo "Copying mark-wells-dev.db.tar.gz.sig to mark-wells-dev.db.sig"
-             cp mark-wells-dev.db.tar.gz.sig mark-wells-dev.db.sig
-          fi
-          if [ -f mark-wells-dev.files.tar.gz.sig ]; then
-             echo "Copying mark-wells-dev.files.tar.gz.sig to mark-wells-dev.files.sig"
-             cp mark-wells-dev.files.tar.gz.sig mark-wells-dev.files.sig
-          fi
-
-      - name: Upload to release
-        if: steps.changes.outputs.has_work == 'true' || inputs.fix_signatures == true
+      - name: Upload to Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -298,45 +127,13 @@ jobs:
           gh release view latest --repo ${{ github.repository }} || \
             gh release create latest --repo ${{ github.repository }} --title "Packages" --notes "Arch Linux binary packages"
 
-          # Delete assets for removed packages
-          for pkg in ${{ steps.changes.outputs.removed }}; do
-            echo "Deleting assets for removed package: $pkg"
-            gh release view latest --repo ${{ github.repository }} --json assets -q '.assets[].name' | \
-              grep "^${pkg}-" | while read -r asset; do
-                gh release delete-asset latest "$asset" --repo ${{ github.repository }} --yes
-              done
-          done
+          # Upload all contents of repo/ (excluding raw tarballs if we only want DBs and pkgs)
+          # We sort -u to deduplicate if any globs overlap
+          FILES_TO_UPLOAD=$(ls repo/*.pkg.tar.zst repo/*.sig repo/*.db.tar.gz repo/*.files.tar.gz repo/*.db.sig repo/*.files.sig repo/*.db repo/*.files 2>/dev/null | sort -u | tr '\n' ' ')
 
-          # Delete old assets for updated packages (before uploading new versions)
-          for file in repo/*.pkg.tar.zst; do
-            [ -f "$file" ] || continue
-            pkg=$(basename "$file" | sed 's/-[^-]*-[^-]*-[^-]*\.pkg\.tar\.zst$//')
-            echo "Cleaning old assets for: $pkg"
-            gh release view latest --repo ${{ github.repository }} --json assets -q '.assets[].name' | \
-              grep "^${pkg}-" | grep -E '\.(pkg\.tar\.zst|sig)$' | while read -r asset; do
-                gh release delete-asset latest "$asset" --repo ${{ github.repository }} --yes
-              done
-          done
-
-          # Clean up legacy DB files if they exist in the release
-          echo "Cleaning up legacy database files..."
-          gh release view latest --repo ${{ github.repository }} --json assets -q '.assets[].name' | \
-            grep -E '^(m-wells\.db|m-wells\.files)' | while read -r asset; do
-              echo "Deleting legacy asset: $asset"
-              gh release delete-asset latest "$asset" --repo ${{ github.repository }} --yes
-            done
-
-                              # Upload files (only exact artifacts)
-                              # Deduplicate files using sort -u to avoid uploading the same file twice (e.g. *.sig and *.db.sig matching same file)
-                              FILES_TO_UPLOAD=$(ls repo/*.pkg.tar.zst repo/*.sig repo/*.db.tar.gz repo/*.files.tar.gz repo/*.db.sig repo/*.files.sig repo/*.db repo/*.files 2>/dev/null | sort -u | tr '\n' ' ')                    
-                    if [ -n "$FILES_TO_UPLOAD" ]; then
-                       echo "Uploading: $FILES_TO_UPLOAD"
-                       gh release upload latest $FILES_TO_UPLOAD --repo ${{ github.repository }} --clobber
-                    else
-                       echo "No files to upload."
-                    fi
-      - name: Check for build failures
-        if: steps.build.outputs.failed != ''
-        run: |
-          echo "::error::The following packages failed to build:${{ steps.build.outputs.failed }}"
-          exit 1
+          if [ -n "$FILES_TO_UPLOAD" ]; then
+             echo "Uploading: $FILES_TO_UPLOAD"
+             gh release upload latest $FILES_TO_UPLOAD --repo ${{ github.repository }} --clobber
+          else
+             echo "No files to upload."
+          fi

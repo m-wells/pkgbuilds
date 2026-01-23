@@ -1,5 +1,8 @@
 # pkgbuilds
 
+[![Build packages](https://github.com/mark-wells-dev/pkgbuilds/actions/workflows/build.yml/badge.svg)](https://github.com/mark-wells-dev/pkgbuilds/actions/workflows/build.yml)
+[![Check for Updates](https://github.com/mark-wells-dev/pkgbuilds/actions/workflows/watch.yml/badge.svg)](https://github.com/mark-wells-dev/pkgbuilds/actions/workflows/watch.yml)
+
 Personal Arch Linux package repository with automated builds and version tracking.
 
 ## Usage
