@@ -40,6 +40,9 @@ done
 echo "Current DB versions:"
 cat db_versions.txt
 
+# Clean up extracted content to avoid artifact upload issues (colons in filenames)
+rm -rf repo/db_content
+
 # 3. Scan Local Packages
 # Find directories containing PKGBUILD
 ALL_PACKAGES=$(find . -maxdepth 2 -name PKGBUILD -printf '%h\n' | sed 's|^\./||' | sort | tr '\n' ' ' | xargs)
