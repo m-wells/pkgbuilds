@@ -1,5 +1,5 @@
 #!/bin/bash
-# Updates sha256sums in a PKGBUILD file
+# Updates checksums in a PKGBUILD file (supports sha256sums and sha512sums)
 # Usage: update-checksums.sh path/to/PKGBUILD
 
 set -e
@@ -10,29 +10,46 @@ cd "$(dirname "$PKGBUILD")"
 # Source the PKGBUILD to get variables
 source PKGBUILD
 
+# Determine checksum type
+if grep -q "sha512sums=" PKGBUILD; then
+    algo="sha512"
+    sum_cmd="sha512sum"
+else
+    algo="sha256"
+    sum_cmd="sha256sum"
+fi
+
+echo "Updating $algo checksums for $PKGBUILD..."
+
 # Calculate checksums for each source
 sums=()
 for src in "${source[@]}"; do
-	# Handle source with custom filename (filename::url)
-	if [[ "$src" == *::* ]]; then
-		url="${src#*::}"
-	else
-		url="$src"
-	fi
+    # Handle source with custom filename (filename::url)
+    if [[ "$src" == *::* ]]; then
+        url="${src#*::}"
+    else
+        url="$src"
+    fi
 
-	# Expand variables in URL
-	url=$(eval echo "$url")
+    # Expand variables in URL
+    url=$(eval echo "$url")
 
-	echo "Fetching: $url" >&2
-	sha=$(curl -sL "$url" | sha256sum | cut -d' ' -f1)
-	sums+=("'$sha'")
+    echo "Fetching: $url" >&2
+    sha=$(curl -sL "$url" | $sum_cmd | cut -d' ' -f1)
+    sums+=("'$sha'")
 done
 
 # Update PKGBUILD
 checksums=$(
-	IFS=$'\n'
-	echo "${sums[*]}" | tr '\n' ' ' | sed 's/ $//'
+    IFS=$'\n'
+    echo "${sums[*]}" | tr '\n' ' ' | sed 's/ $//'
 )
-sed -i "s/sha256sums=.*/sha256sums=($checksums)/" PKGBUILD
 
-echo "Updated checksums in $PKGBUILD" >&2
+# Replace the existing checksum line
+if [ "$algo" == "sha512" ]; then
+    sed -i "s/sha512sums=.*/sha512sums=($checksums)/" PKGBUILD
+else
+    sed -i "s/sha256sums=.*/sha256sums=($checksums)/" PKGBUILD
+fi
+
+echo "Updated $algo checksums in $PKGBUILD" >&2

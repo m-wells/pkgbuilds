@@ -32,7 +32,8 @@ sudo pacman -S gemini-cli rpi-imager
 ## How It Works
 
 - **PKGBUILDs** are stored in this repo
-- **Renovate Bot** monitors upstream releases and creates PRs with version bumps
+- **CI/CD** via GitHub Actions (builds in clean Arch Linux container)
+- **Automatic Releases** created when changes are pushed to `main`
 - **GitHub Actions** builds packages on merge to main (only changed packages are rebuilt)
 - **Packages are signed** with GPG and published to GitHub Releases
 - **pacman** syncs directly from the release assets
@@ -54,17 +55,22 @@ sudo pacman -S gemini-cli rpi-imager
    └── PKGBUILD    # pkgname=my-package
    ```
 
-2. Add a Renovate comment for version tracking:
+2. Add an update script in `scripts/packages/<pkgname>.sh`:
 
-   ```bash
-   pkgver=1.0.0
-   # renovate: datasource=npm depName=package-name
-   pkgrel=1
-   ```
+```bash
+check_pkgname() {
 
-   Common datasources:
-   - `npm` - for npm packages
-   - `github-releases` - for GitHub releases
+  # check logic here, call perform_update
+
+}
+
+check_pkgname
+```
+
+Common datasources:
+
+- `npm` - for npm packages
+- `github-releases` - for GitHub releases
 
 3. Commit and push - the package will be automatically detected and built
 
