@@ -2,7 +2,7 @@
 # Packaged from npm
 pkgname=gemini-cli
 pkgver=0.25.2
-pkgrel=1
+pkgrel=2
 epoch=1
 pkgdesc="Open-source AI agent that brings the power of Gemini directly into your terminal"
 arch=('any')
