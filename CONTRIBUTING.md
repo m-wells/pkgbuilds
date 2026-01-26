@@ -44,9 +44,7 @@ virtctl/PKGBUILD        # Binary download
 ### npm Packages
 
 - Use `arch=('any')`.
-
 - Download the tarball from the npm registry.
-
 - Install using `npm install -g --prefix`.
 
 #### Handling Deprecation Warnings
@@ -57,9 +55,7 @@ Since Arch Linux runs the latest Node.js versions, many packages may emit noisy 
 
    ```bash
    #!/bin/bash
-   
    export NODE_OPTIONS="--no-deprecation"
-   
    exec /usr/lib/node_modules/ < package-name > /bin/ < entry-point > "$@"
    ```
 
@@ -69,15 +65,11 @@ Since Arch Linux runs the latest Node.js versions, many packages may emit noisy 
    source=(... "wrapper.sh")
    
    package() {
-   
      # ... npm install ...
    
      # Replace symlink
-   
      rm "${pkgdir}/usr/bin/<binary-name>"
-   
      install -Dm755 "${srcdir}/wrapper.sh" "${pkgdir}/usr/bin/<binary-name>"
-   
    }
    ```
 
