@@ -75,10 +75,12 @@ Common datasources:
 
 3. Commit and push - the package will be automatically detected and built
 
+## Known Issues
+
+### rpi-imager URL opening
+
+Clicking links within the `rpi-imager` application may fail. This occurs because the AppImage's bundled libraries can break PAM when calling `runuser` to launch a browser. This is an upstream issue; avoid attempting downstream fixes in the wrapper script as they have proven unreliable.
+
 ## Contributing
 
-1. Fork this repository
-2. Add a new package directory with a PKGBUILD
-3. Submit a pull request
-4. CI will build and verify the package
-5. Once merged, the package is automatically published
+For detailed instructions on how to add new packages, build them locally, and understand the project structure, please see [CONTRIBUTING.md](./CONTRIBUTING.md).
