@@ -45,15 +45,6 @@ fi
 # 3. Sign and Add New Packages
 cd repo
 
-# Rename files with colons (epochs) to dots
-for f in *; do
-    if [[ $f == *:* ]]; then
-        new_name=$(echo "$f" | tr ':' '.')
-        echo "Renaming $f -> $new_name"
-        mv "$f" "$new_name"
-    fi
-done
-
 # Sign packages
 for pkg in *.pkg.tar.zst; do
     [ -f "$pkg" ] || continue

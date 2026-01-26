@@ -26,6 +26,16 @@ if ! su builder -c "cd $PKG && makepkg -s --noconfirm"; then
     exit 1
 fi
 
+# Rename artifact if it contains colons (GitHub Actions compatibility)
+for f in "$PKG"/*.pkg.tar.zst; do
+    [ -e "$f" ] || continue
+    if [[ "$f" == *:* ]]; then
+        new_name=$(echo "$f" | tr ':' '.')
+        echo "Renaming artifact: $f -> $new_name"
+        mv "$f" "$new_name"
+    fi
+done
+
 # 2. Smoke Test
 # Look for check.sh in the package directory
 if [ -f "$PKG/check.sh" ]; then
