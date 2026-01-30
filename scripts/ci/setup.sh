@@ -23,12 +23,12 @@ if ! id -u builder > /dev/null 2>&1; then
     echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 fi
 
-# 2.5 Install AUR helper (paru-bin)
-echo "==> Installing paru-bin..."
+# 2.5 Install AUR helper (yay-bin)
+echo "==> Installing yay-bin..."
 su builder -c "
     cd /tmp
-    git clone https://aur.archlinux.org/paru-bin.git
-    cd paru-bin
+    git clone https://aur.archlinux.org/yay-bin.git
+    cd yay-bin
     makepkg -si --noconfirm
 "
 

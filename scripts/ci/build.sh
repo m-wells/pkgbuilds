@@ -22,10 +22,10 @@ echo "==> Building package: $PKG"
 # Run makepkg as the builder user
 # -s: Install deps, --noconfirm: No prompts
 
-# Step 1: Install dependencies (Repo + AUR) using paru
-# We use 'paru -S --needed .' to install deps defined in PKGBUILD
-echo "==> Resolving dependencies with paru..."
-if ! su builder -c "cd $PKG && paru -S --noconfirm --asdeps --needed ."; then
+# Step 1: Install dependencies (Repo + AUR) using yay
+# We use 'yay -S --needed .' to install deps defined in PKGBUILD
+echo "==> Resolving dependencies with yay..."
+if ! su builder -c "cd $PKG && yay -S --noconfirm --asdeps --needed ."; then
     echo "::error::Failed to install dependencies for $PKG"
     exit 1
 fi
