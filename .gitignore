@@ -33,3 +33,6 @@ npm-cache/
 # AppImage extraction artifacts
 squashfs-root/
 node_modules/
+
+# Wiki (separate git repo)
+wiki/
