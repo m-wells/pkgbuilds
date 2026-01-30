@@ -25,7 +25,7 @@ echo "==> Building package: $PKG"
 # Step 1: Install dependencies (Repo + AUR) using yay
 echo "==> Resolving dependencies with yay..."
 # Extract dependencies from PKGBUILD using makepkg --printsrcinfo
-DEPS=$(su builder -c "cd $PKG && makepkg --printsrcinfo" | awk '/^\s+(make)?depends\s+=\s+/{ print $3 }' | tr '\n' ' ')
+DEPS=$(su builder -c "cd $PKG && makepkg --printsrcinfo" | awk '/^\s+(make|check)?depends\s+=\s+/{ print $3 }' | tr '\n' ' ')
 
 if [ -z "$DEPS" ]; then
     echo "::warning::No dependencies found or failed to parse."
