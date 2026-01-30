@@ -46,20 +46,30 @@ rm -rf repo/db_content
 # 3. Scan Local Packages
 # Find directories containing PKGBUILD
 ALL_PACKAGES=$(find . -maxdepth 3 -name PKGBUILD -printf '%h\n' | sed 's|^\./||' | sort | tr '\n' ' ' | xargs)
-echo "Local packages: $ALL_PACKAGES"
+echo "All packages: $ALL_PACKAGES"
+
+# Filter to only packages with .local marker (for building)
+LOCAL_PACKAGES=""
+for pkg in $ALL_PACKAGES; do
+    if [ -f "$pkg/.local" ]; then
+        LOCAL_PACKAGES="$LOCAL_PACKAGES $pkg"
+    fi
+done
+LOCAL_PACKAGES=$(echo "$LOCAL_PACKAGES" | xargs)
+echo "Local packages (with .local marker): $LOCAL_PACKAGES"
 
 PACKAGES_TO_BUILD=()
 REMOVED_PACKAGES=()
 
 # Check for forced rebuild
 if [ "$FORCE_REBUILD" = "true" ]; then
-    echo "Force rebuild active: building all packages."
-    for pkg in $ALL_PACKAGES; do
+    echo "Force rebuild active: building all local packages."
+    for pkg in $LOCAL_PACKAGES; do
         PACKAGES_TO_BUILD+=("$pkg")
     done
 else
-    # Standard change detection
-    for pkg in $ALL_PACKAGES; do
+    # Standard change detection (only for .local packages)
+    for pkg in $LOCAL_PACKAGES; do
         echo "Checking $pkg..."
 
         # Parse PKGBUILD using makepkg (as builder)
