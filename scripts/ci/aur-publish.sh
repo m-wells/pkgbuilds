@@ -11,11 +11,13 @@ mkdir -p ~/.ssh
 echo "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
 chmod 600 ~/.ssh/aur
 
+# Add AUR host key to known_hosts
+ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2> /dev/null
+
 cat >> ~/.ssh/config << EOF
 Host aur.archlinux.org
     IdentityFile ~/.ssh/aur
     User aur
-    StrictHostKeyChecking accept-new
 EOF
 
 # Configure git
