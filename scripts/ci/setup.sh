@@ -55,7 +55,7 @@ SigLevel = Optional TrustAll
 Server = file:///var/local-repo
 
 [mark-wells-dev]
-SigLevel = Optional TrustAll
+SigLevel = Never
 Server = https://github.com/Mark-Wells-Dev/pkgbuilds/releases/download/latest
 EOF
 
