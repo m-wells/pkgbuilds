@@ -48,7 +48,16 @@ chown builder:builder /var/local-repo
 # Add local repo to pacman.conf with highest priority (before other repos)
 sed -i '/^\[core\]/i [local-repo]\nSigLevel = Optional TrustAll\nServer = file:///var/local-repo\n' /etc/pacman.conf
 
-# Initialize empty repo database
-su builder -c "repo-add /var/local-repo/local-repo.db.tar.gz"
+# Initialize empty repo database with proper symlinks
+# repo-add needs at least one package, so we create empty db manually
+touch /var/local-repo/.empty
+tar -czf /var/local-repo/local-repo.db.tar.gz -T /dev/null
+tar -czf /var/local-repo/local-repo.files.tar.gz -T /dev/null
+ln -sf local-repo.db.tar.gz /var/local-repo/local-repo.db
+ln -sf local-repo.files.tar.gz /var/local-repo/local-repo.files
+chown -R builder:builder /var/local-repo
+
+# Sync package databases (including our empty local-repo)
+pacman -Sy
 
 echo "==> Setup complete."
