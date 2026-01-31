@@ -1,0 +1,34 @@
+# Maintainer: Mark Wells <contact@markwells.dev>
+# shellcheck shell=bash disable=SC2034,SC2154
+pkgname=keeper-secrets-manager-core
+pkgver=17.1.0
+pkgrel=1
+pkgdesc="Keeper Secrets Manager SDK core module"
+arch=('any')
+url="https://github.com/Keeper-Security/secrets-manager"
+license=('MIT')
+depends=(
+    'python'
+    'python-requests'
+    'python-cryptography>=39.0.1'
+    'python-importlib-metadata'
+    'python-urllib3>=2.6.0'
+)
+makedepends=(
+    'python-build'
+    'python-installer'
+    'python-setuptools'
+)
+source=("https://files.pythonhosted.org/packages/source/k/keeper_secrets_manager_core/keeper_secrets_manager_core-$pkgver.tar.gz")
+sha512sums=('169167251a7c36d7813508db322e0021cabb248fa8dc997b5b63b638113ff71170489ad0848950ac7852a7bc2b0233c67de4032ce28cce6e8833f382956d2793')
+
+build() {
+    cd "keeper_secrets_manager_core-$pkgver"
+    python -m build --wheel --no-isolation
+}
+
+package() {
+    cd "keeper_secrets_manager_core-$pkgver"
+    python -m installer --destdir="$pkgdir" dist/*.whl
+}
+# vim:set ts=2 sw=2 et:
