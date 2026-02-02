@@ -69,11 +69,17 @@ for pkg in *.pkg.tar.zst; do
 done
 
 # Update Database
-# We use *.pkg.tar.zst glob. repo-add is smart enough to update existing entries or add new ones.
-if ls *.pkg.tar.zst 1> /dev/null 2>&1; then
+# Even if no new packages were built, we want to ensure the DB is updated and signed
+# particularly during migration or if removals occurred.
+if [ -f markwells-dev.db.tar.gz ] || ls *.pkg.tar.zst 1> /dev/null 2>&1; then
     echo "Updating database..."
     # We use the renamed files (with dots), repo-add handles them fine.
+    # repo-add will create it if it doesn't exist.
     repo-add --sign --key "$GPG_KEY_ID" markwells-dev.db.tar.gz *.pkg.tar.zst
+
+    # Ensure symlinks exist for pacman's default expectations
+    ln -sf markwells-dev.db.tar.gz markwells-dev.db
+    ln -sf markwells-dev.files.tar.gz markwells-dev.files
 
     # Sync legacy/symlink signatures
     if [ -f markwells-dev.db.tar.gz.sig ]; then
