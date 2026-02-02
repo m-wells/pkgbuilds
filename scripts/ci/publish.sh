@@ -84,6 +84,8 @@ if [ -f "${REPO_NAME}.db.tar.gz" ] || ls *.pkg.tar.zst 1> /dev/null 2>&1; then
     done
 
     # Ensure files exist for pacman's default expectations (no symlinks for GitHub Releases)
+    # Remove first to avoid "same file" errors if they were already copies/links
+    rm -f "${REPO_NAME}.db" "${REPO_NAME}.files"
     cp -f "${REPO_NAME}.db.tar.gz" "${REPO_NAME}.db"
     cp -f "${REPO_NAME}.files.tar.gz" "${REPO_NAME}.files"
 
