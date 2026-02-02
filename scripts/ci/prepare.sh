@@ -14,9 +14,16 @@ fi
 
 mkdir -p repo
 
+# Check for manual publish flag in commit message
+if git log -1 --pretty=%B | grep -qi "\[publish\]"; then
+    echo "Manual publish requested via commit message."
+    MANUAL_PUBLISH=true
+fi
+
 # 1. Download Repository Database
 echo "==> Downloading repository database..."
 
+MIGRATED=false
 if ! gh release download latest --repo "$GITHUB_REPOSITORY" --pattern 'markwells-dev.db.tar.gz' --dir repo 2> /dev/null; then
     echo "No new database found. Checking for old 'mark-wells-dev' database for migration..."
     if gh release download latest --repo "$GITHUB_REPOSITORY" --pattern 'mark-wells-dev.db.tar.gz' --dir repo 2> /dev/null; then
@@ -26,12 +33,23 @@ if ! gh release download latest --repo "$GITHUB_REPOSITORY" --pattern 'markwells
         if gh release download latest --repo "$GITHUB_REPOSITORY" --pattern 'mark-wells-dev.files.tar.gz' --dir repo 2> /dev/null; then
             mv repo/mark-wells-dev.files.tar.gz repo/markwells-dev.files.tar.gz
         fi
+
+        # To migrate successfully, we need the actual package files for repo-add
+        echo "Downloading existing packages for database migration..."
+        gh release download latest --repo "$GITHUB_REPOSITORY" --pattern '*.pkg.tar.zst' --dir repo 2> /dev/null || true
+        MIGRATED=true
     else
         echo "No existing database found. Starting fresh."
     fi
 else
     # Also try to get the files db
     gh release download latest --repo "$GITHUB_REPOSITORY" --pattern 'markwells-dev.files.tar.gz' --dir repo 2> /dev/null || true
+
+    # If manual publish requested, download packages so they can be re-indexed/signed
+    if [ "$MANUAL_PUBLISH" = "true" ]; then
+        echo "Downloading existing packages for manual publish..."
+        gh release download latest --repo "$GITHUB_REPOSITORY" --pattern '*.pkg.tar.zst' --dir repo 2> /dev/null || true
+    fi
 fi
 
 # Extract DB to read versions
@@ -142,7 +160,7 @@ done < db_versions.txt
 # 5. Sort packages by dependencies (base packages first)
 # This ensures packages are built in the right order for the local repo
 sort_by_dependencies() {
-    local packages=("$@")
+    local packages=($@)
     local sorted=()
     local remaining=("${packages[@]}")
 
@@ -234,7 +252,7 @@ fi
 } >> "$GITHUB_OUTPUT"
 
 # Determine flags
-if [ ${#PACKAGES_TO_BUILD[@]} -gt 0 ] || [ ${#REMOVED_PACKAGES[@]} -gt 0 ]; then
+if [ ${#PACKAGES_TO_BUILD[@]} -gt 0 ] || [ ${#REMOVED_PACKAGES[@]} -gt 0 ] || [ "$MIGRATED" = "true" ] || [ "$MANUAL_PUBLISH" = "true" ]; then
     echo "has_work=true" >> "$GITHUB_OUTPUT"
     echo "run_publish=true" >> "$GITHUB_OUTPUT"
 else
