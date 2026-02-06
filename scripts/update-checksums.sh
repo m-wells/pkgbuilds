@@ -4,14 +4,19 @@
 
 set -e
 
-PKGBUILD="$1"
-cd "$(dirname "$PKGBUILD")"
+PKGBUILD_PATH="$1"
+PKGBUILD_DIR="$(dirname "$PKGBUILD_PATH")"
+PKGBUILD_FILE="$(basename "$PKGBUILD_PATH")"
+
+# Ensure we are in the correct directory for local file sources
+cd "$PKGBUILD_DIR"
 
 # Source the PKGBUILD to get variables
-source PKGBUILD
+# shellcheck source=/dev/null
+source "$PKGBUILD_FILE"
 
 # Determine checksum type
-if grep -q "sha512sums=" PKGBUILD; then
+if grep -q "sha512sums=" "$PKGBUILD_FILE"; then
     algo="sha512"
     sum_cmd="sha512sum"
 else
@@ -19,7 +24,7 @@ else
     sum_cmd="sha256sum"
 fi
 
-echo "Updating $algo checksums for $PKGBUILD..."
+echo "Updating $algo checksums for $PKGBUILD_PATH..."
 
 # Calculate checksums for each source
 sums=()
@@ -36,7 +41,17 @@ for src in "${source[@]}"; do
     url=$(eval echo "$url")
 
     echo "Fetching: $url" >&2
-    sha=$(curl -sL "$url" | $sum_cmd | cut -d' ' -f1)
+    if [[ "$url" == http* ]]; then
+        sha=$(curl -sL "$url" | $sum_cmd | cut -d' ' -f1)
+    else
+        # Local file
+        if [ -f "$url" ]; then
+            sha=$($sum_cmd "$url" | cut -d' ' -f1)
+        else
+            echo "Error: Local file $url not found" >&2
+            exit 1
+        fi
+    fi
     sums+=("'$sha'")
 done
 
@@ -47,6 +62,7 @@ checksums=$(
 )
 
 # Replace the existing checksum array (handles multi-line)
-perl -i -0777 -pe "s/${algo}sums=\(.*?\)/${algo}sums=($checksums)/sg" "$PKGBUILD"
+# We use perl in slurp mode to handle multi-line checksum arrays
+perl -i -0777 -pe "s/${algo}sums=\\\(.*?\\\)/${algo}sums=($checksums)/sg" "$PKGBUILD_FILE"
 
-echo "Updated $algo checksums in $PKGBUILD" >&2
+echo "Updated $algo checksums in $PKGBUILD_PATH" >&2
