@@ -23,6 +23,7 @@ echo "Updating $algo checksums for $PKGBUILD..."
 
 # Calculate checksums for each source
 sums=()
+# shellcheck disable=SC2154
 for src in "${source[@]}"; do
     # Handle source with custom filename (filename::url)
     if [[ "$src" == *::* ]]; then

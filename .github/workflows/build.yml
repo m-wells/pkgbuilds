@@ -103,9 +103,9 @@ jobs:
     needs: [prepare, build]
     # Run if prepare succeeded, and build either succeeded or was skipped (no work), AND we are told to publish
     if: |
-      always() && 
-      needs.prepare.result == 'success' && 
-      (needs.build.result == 'success' || needs.build.result == 'skipped') && 
+      always() &&
+      needs.prepare.result == 'success' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
       needs.prepare.outputs.run_publish == 'true' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main'

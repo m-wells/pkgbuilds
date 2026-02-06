@@ -11,7 +11,8 @@ source "${SCRIPT_DIR}/../lib/common.sh"
 echo "==> Finalizing repository..."
 
 # Configure GPG for non-interactive use
-export GPG_TTY=$(tty 2> /dev/null || echo /dev/tty)
+GPG_TTY=$(tty 2> /dev/null || echo /dev/tty)
+export GPG_TTY
 mkdir -p ~/.gnupg
 chmod 700 ~/.gnupg
 echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf

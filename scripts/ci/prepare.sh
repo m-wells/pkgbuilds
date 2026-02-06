@@ -167,7 +167,7 @@ done < db_versions.txt
 # 5. Sort packages by dependencies (base packages first)
 # This ensures packages are built in the right order for the local repo
 sort_by_dependencies() {
-    local packages=($@)
+    local packages=("$@")
     local sorted=()
     local remaining=("${packages[@]}")
 

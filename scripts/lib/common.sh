@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2034
 
 # Configuration
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -25,7 +26,8 @@ perform_update() {
         return 1
     fi
 
-    local old_ver=$(get_local_version "$pkgbuild")
+    local old_ver
+    old_ver=$(get_local_version "$pkgbuild")
 
     if [ "$old_ver" == "$new_ver" ]; then
         # echo "$pkg_name is up to date ($old_ver)"
