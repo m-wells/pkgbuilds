@@ -1,0 +1,48 @@
+# Build artifacts
+*.pkg.tar.zst
+*.pkg.tar.zst.sig
+*.pkg.tar.xz
+*.pkg.tar.xz.sig
+src/
+pkg/
+
+# Downloaded sources (makepkg)
+pkgs/**/*.tar.gz
+pkgs/**/*.tgz
+pkgs/**/*.AppImage
+pkgs/**/*.policy
+pkgs/**/*-linux-amd64
+pkgs/**/*-linux-x86_64
+pkgs/**/*.run
+pkgs/**/LICENSE-*
+
+# Repo database
+*.db
+*.db.tar.gz
+*.db.tar.gz.sig
+*.files
+*.files.tar.gz
+*.files.tar.gz.sig
+
+# Editor files
+*.swp
+*~
+.vscode/
+.idea/
+
+# AI context files
+CLAUDE.md
+GEMINI.md
+COPILOT.md
+.cursorrules
+.cursor/
+
+# npm cache (from builds)
+npm-cache/
+
+# AppImage extraction artifacts
+squashfs-root/
+node_modules/
+
+# Wiki (separate git repo)
+docs/

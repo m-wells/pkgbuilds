@@ -1,0 +1,33 @@
+# Maintainer: Mark Wells <contact at markwells dot dev>
+# shellcheck shell=bash disable=SC2034,SC2154,SC2164
+pkgname=python-pyngrok
+_name=pyngrok
+pkgver=8.1.2
+pkgrel=1
+pkgdesc="A Python wrapper for ngrok"
+arch=('any')
+url="https://github.com/alexdlaird/pyngrok"
+license=('MIT')
+depends=('python' 'python-yaml')
+makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools')
+# Vendored from the AUR (keeper-commander dependency) so CI never builds an
+# AUR package inside the pipeline — a hole the 2026-08 AUR malware wave made
+# vivid. Built from the PyPI sdist instead: registry files are immutable and
+# the watcher pins PyPI's published digest (see PROVENANCE.md). The MIT
+# LICENSE is not guaranteed inside the sdist, so it is tag-pinned separately.
+source=("https://files.pythonhosted.org/packages/source/p/pyngrok/pyngrok-$pkgver.tar.gz"
+    "LICENSE-$pkgver::https://raw.githubusercontent.com/alexdlaird/pyngrok/$pkgver/LICENSE")
+sha256sums=('3b5383ec7dc4646ac0d046435eb58c6cd1cbc9acad70e6dee012b05dc25b070a'
+    '9ca82e05c52f7b398b365af9593e711960f35da504fd59206ff679b2808baf74')
+
+build() {
+    cd "$_name-$pkgver"
+    python -m build --wheel --no-isolation
+}
+
+package() {
+    cd "$_name-$pkgver"
+    python -m installer --destdir="$pkgdir" dist/*.whl
+    install -Dm644 "$srcdir/LICENSE-$pkgver" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
+# vim:set ts=2 sw=2 et:

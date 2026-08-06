@@ -1,0 +1,53 @@
+name: Check for Updates
+
+# The schedule is the only trigger that matters here: every package tracks a
+# third-party upstream (sanoid, keeper, NVIDIA via Arch, …) that can't
+# announce its releases. Nothing dispatches this workflow externally.
+on:
+  schedule:
+    - cron: '*/30 * * * *' # Run every 30 minutes
+  workflow_dispatch: # Manual trigger
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: check-updates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # Fetch all history for accurate diff
+
+      - name: Setup Node.js (for npm)
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: Run update check
+        run: ./scripts/check-updates.sh
+
+      - name: Detect changes
+        id: changes
+        run: |
+          if git log origin/${{ github.ref_name }}..HEAD --oneline | grep -q .; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Push changes
+        if: steps.changes.outputs.changed == 'true'
+        uses: ad-m/github-push-action@881a6320fdb16eb5318c5054f31c218aec2b324c # v1.3.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
+
+      - name: Trigger build workflow
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run build.yml --ref ${{ github.ref_name }}

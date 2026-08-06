@@ -1,0 +1,168 @@
+name: Build packages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Rebuild all packages'
+        type: boolean
+        default: false
+      fix_signatures:
+        description: 'Fix database signatures without rebuilding'
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    # Fork (untrusted) PRs must never build arbitrary PKGBUILDs unsupervised —
+    # that is RCE on the runner host. Only push/dispatch and same-repo (trusted)
+    # PRs run here; a fork PR skips `prepare`, which cascades to skip
+    # build/publish. Add a separate fork-PR workflow if you want fork-PR CI.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.scan.outputs.matrix }}
+      removed: ${{ steps.scan.outputs.removed }}
+      run_publish: ${{ steps.scan.outputs.run_publish }}
+      checkout_sha: ${{ steps.sha.outputs.checkout_sha }}
+    steps:
+      - name: Install git
+        run: pacman -Sy --noconfirm git
+
+      - uses: actions/checkout@v7
+
+      - name: Setup environment
+        run: ./scripts/ci/setup.sh
+
+      # A checksum mismatch fails this step by design (see PROVENANCE.md) —
+      # there is deliberately no auto-repair and no bot push here anymore.
+      - name: Lint PKGBUILDs
+        run: ./scripts/lint.sh
+
+      - name: Record checkout SHA
+        id: sha
+        working-directory: ${{ github.workspace }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo "checkout_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare build matrix
+        id: scan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
+          FIX_SIGNATURES: ${{ inputs.fix_signatures }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || github.event.workflow_run.head_commit.message }}
+        run: ./scripts/ci/prepare.sh
+
+      - name: Upload Repository DB
+        uses: actions/upload-artifact@v7
+        with:
+          name: repo-db
+          path: repo/
+          compression-level: 0
+
+  # No AUR legs here: this is the personal channel (every package is
+  # .local-only). AUR publishing lives in TwoWells/pkgbuilds.
+  build:
+    needs: [prepare]
+    if: ${{ always() && needs.prepare.result == 'success' && fromJson(needs.prepare.outputs.matrix)[0] != null }}
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install git
+        run: pacman -Sy --noconfirm git
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.checkout_sha }}
+
+      - name: Setup environment
+        run: ./scripts/ci/setup.sh
+
+      - name: Build packages sequentially
+        env:
+          PACKAGES: ${{ needs.prepare.outputs.matrix }}
+        run: |
+          # Build packages one by one, each gets added to local repo
+          # so subsequent packages can depend on earlier ones
+          for pkg in $(echo "$PACKAGES" | jq -r '.[]'); do
+            echo "::group::Building $pkg"
+            ./scripts/ci/build.sh "$pkg"
+            echo "::endgroup::"
+          done
+
+      - name: Upload Package Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: pkgs/*/*.pkg.tar.zst
+          compression-level: 0
+
+  publish:
+    needs: [prepare, build]
+    # Run if prepare succeeded, the build job either succeeded or was skipped, AND we are told to publish
+    if: |
+      always() &&
+      needs.prepare.result == 'success' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+      needs.prepare.outputs.run_publish == 'true' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    permissions:
+      contents: write
+    steps:
+      - name: Install git
+        run: pacman -Sy --noconfirm git
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.checkout_sha }}
+          fetch-depth: 0
+
+      - name: Setup environment
+        run: ./scripts/ci/setup.sh
+
+      - name: Import GPG key
+        run: echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+
+      - name: Download Repository DB
+        uses: actions/download-artifact@v8
+        with:
+          name: repo-db
+          path: repo
+
+      - name: Download Built Packages
+        # Only download if build job ran
+        if: needs.build.result == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: repo-artifacts
+
+      - name: Finalize Repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          REMOVED_JSON: ${{ needs.prepare.outputs.removed }}
+        run: ./scripts/ci/publish.sh
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REMOVED_JSON: ${{ needs.prepare.outputs.removed }}
+        run: ./scripts/ci/release.sh
