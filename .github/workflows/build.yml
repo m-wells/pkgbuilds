@@ -140,6 +140,11 @@ jobs:
         run: echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
 
       - name: Download Repository DB
+        # Bootstrap tolerance: before the first publish there is no database,
+        # prepare uploads no repo-db artifact, and this download finds nothing.
+        # publish.sh handles the empty case (mkdir -p repo; repo-add builds the
+        # db from scratch), so a missing artifact must not fail the job.
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: repo-db
