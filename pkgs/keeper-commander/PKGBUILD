@@ -5,7 +5,7 @@
 # Contributor: jskier <jay @jskier.com>
 # shellcheck shell=bash disable=SC2034,SC2154,SC2164
 pkgname=keeper-commander
-pkgver=18.1.2
+pkgver=18.1.3
 pkgrel=1
 epoch=1
 pkgdesc="CLI, SDK and interactive shell for Keeper® Password Manager."
@@ -68,7 +68,7 @@ makedepends=(
 # is not guaranteed inside the sdist, so it is fetched from the tagged tree.
 source=("https://files.pythonhosted.org/packages/source/k/keepercommander/keepercommander-$pkgver.tar.gz"
     "LICENSE-$pkgver::https://raw.githubusercontent.com/Keeper-Security/Commander/v$pkgver/LICENSE")
-sha256sums=('3e642bf08c2a09bc489a81e79814966dd92749208d1fb68bcbfdc9931269101e' 'a6538169baa044f5f780a8a4533c9c434e6e3d97ead370d2ad6f280f204389fd')
+sha256sums=('590bb90c85bd7cdc8659fa480197d9ca7ec58cf0e1c11d4c6925e1c18c4fac66' 'a6538169baa044f5f780a8a4533c9c434e6e3d97ead370d2ad6f280f204389fd')
 
 build() {
     cd "keepercommander-$pkgver"
