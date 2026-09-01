@@ -36,7 +36,10 @@ perform_update() {
     old_ver=$(get_local_version "$pkgbuild")
 
     if [ "$old_ver" == "$new_ver" ]; then
-        # echo "$pkg_name is up to date ($old_ver)"
+        # Say so explicitly: a silent up-to-date is indistinguishable in the
+        # CI log from a check that never compared anything (2026-08 nvidia
+        # incident — the watcher looked green for 11 days while stale).
+        echo "$pkg_name is up to date ($old_ver)"
         return 0
     fi
 
