@@ -5,6 +5,8 @@ set -e
 # Creates a fresh GitHub release with all assets, then marks it as latest.
 # Uses a draft release during upload to ensure atomicity — the old release
 # stays live until the new one is fully uploaded and published.
+# Refuses to publish any database or package whose detached signature is
+# missing or does not verify (step 3b).
 
 # Source common variables
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,8 +43,6 @@ if [ -d repo ] && [ "$(ls -A repo/ 2> /dev/null)" ]; then
     cp -f repo/*.files.tar.gz "$STAGING_DIR/" 2> /dev/null || true
     cp -f repo/*.db "$STAGING_DIR/" 2> /dev/null || true
     cp -f repo/*.files "$STAGING_DIR/" 2> /dev/null || true
-    cp -f repo/*.db.sig "$STAGING_DIR/" 2> /dev/null || true
-    cp -f repo/*.files.sig "$STAGING_DIR/" 2> /dev/null || true
 fi
 
 # Verify we have something to upload
@@ -52,6 +52,32 @@ if [ "$ASSET_COUNT" -eq 0 ]; then
     exit 1
 fi
 echo "==> $ASSET_COUNT assets ready for upload."
+
+# 3b. Verify every database and package in staging against its detached
+# signature. Staging inherits the previous release's assets (step 1), so a
+# run that overlays a new .db without a fresh .db.sig would otherwise ship
+# the OLD signature next to the NEW database — and pacman's DatabaseOptional
+# treats a present-but-invalid signature as a hard error, worse than no
+# signature at all. Inherited package signatures are checked too, so a key
+# rotation that leaves old packages signed by a retired key surfaces here
+# rather than on a node. gpg holds the public key because the publish step
+# imported the signing keypair.
+echo "==> Verifying asset signatures..."
+for asset in "$STAGING_DIR"/*.db "$STAGING_DIR"/*.files \
+    "$STAGING_DIR"/*.db.tar.gz "$STAGING_DIR"/*.files.tar.gz \
+    "$STAGING_DIR"/*.pkg.tar.zst; do
+    [ -f "$asset" ] || continue
+    if [ ! -f "${asset}.sig" ]; then
+        echo "::error::Missing signature for $(basename "$asset"). Aborting release."
+        exit 1
+    fi
+    if ! verify_out=$(gpg --batch --verify "${asset}.sig" "$asset" 2>&1); then
+        echo "::error::Signature does not verify for $(basename "$asset"). Aborting release."
+        echo "$verify_out"
+        exit 1
+    fi
+    echo "Verified $(basename "$asset")"
+done
 
 # 4. Create a draft release on the new tag
 echo "==> Creating draft release on tag $NEW_TAG..."
