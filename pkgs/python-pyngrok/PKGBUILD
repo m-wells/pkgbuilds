@@ -2,7 +2,7 @@
 # shellcheck shell=bash disable=SC2034,SC2154,SC2164
 pkgname=python-pyngrok
 _name=pyngrok
-pkgver=9.0.0
+pkgver=9.0.1
 pkgrel=1
 pkgdesc="A Python wrapper for ngrok"
 arch=('any')
@@ -17,7 +17,7 @@ makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools
 # LICENSE is not guaranteed inside the sdist, so it is tag-pinned separately.
 source=("https://files.pythonhosted.org/packages/source/p/pyngrok/pyngrok-$pkgver.tar.gz"
     "LICENSE-$pkgver::https://raw.githubusercontent.com/alexdlaird/pyngrok/$pkgver/LICENSE")
-sha256sums=('04dc6e7ea5e9ca5277088ddec76566de5ca5ec0afe575a8ea2ee9ae7855efb00' '9ca82e05c52f7b398b365af9593e711960f35da504fd59206ff679b2808baf74')
+sha256sums=('4e42dd41be4c2fef6e7ce14008eeb138034d248b6f7302f0fa70e0f2bf238920' '9ca82e05c52f7b398b365af9593e711960f35da504fd59206ff679b2808baf74')
 
 build() {
     cd "$_name-$pkgver"
