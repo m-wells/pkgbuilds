@@ -29,14 +29,15 @@ maintainer's own machines.
 Every package is Class 1 (published claim) or Class 1b (content-addressed)
 — this repo carries no TOFU pins.
 
-| Package                     | Upstream artifact       | Trust anchor                                                                    |
-| --------------------------- | ----------------------- | -------------------------------------------------------------------------------- |
-| keeper-commander            | PyPI sdist              | Class 1 — PyPI's published digest (+ tag-pinned LICENSE, static)                |
-| keeper-secrets-manager-core | PyPI sdist              | Class 1 — PyPI's published digest                                               |
-| nvidia-proprietary-dkms     | NVIDIA `.run` installer | Class 1 — sha512 claim from Arch's `nvidia-utils` packaging recipe (`.SRCINFO`) |
-| perl-config-inifiles        | CPAN dist tarball       | Class 1 — MetaCPAN `checksum_sha256` (legacy sha512 pin converts at next bump)  |
-| python-pyngrok              | PyPI sdist              | Class 1 — PyPI's published digest (+ tag-pinned LICENSE, static)                |
-| sanoid                      | git repository          | Class 1b — commit pin resolved from the release tag                             |
+| Package                     | Upstream artifact                   | Trust anchor                                                                                                                    |
+| --------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| keeper-commander            | PyPI sdist                          | Class 1 — PyPI's published digest (+ tag-pinned LICENSE, static)                                                                |
+| keeper-secrets-manager-core | PyPI sdist                          | Class 1 — PyPI's published digest                                                                                               |
+| nvidia-proprietary-dkms     | NVIDIA `.run` installer             | Class 1 — sha512 claim from Arch's `nvidia-utils` packaging recipe (`.SRCINFO`)                                                 |
+| nvidia-open-dkms-pmstate    | NVIDIA kernel-module source tarball | Class 1 — sha512 claim from Arch's `nvidia-utils` packaging recipe (`.SRCINFO`); the patch is this repo's own, pinned beside it |
+| perl-config-inifiles        | CPAN dist tarball                   | Class 1 — MetaCPAN `checksum_sha256` (legacy sha512 pin converts at next bump)                                                  |
+| python-pyngrok              | PyPI sdist                          | Class 1 — PyPI's published digest (+ tag-pinned LICENSE, static)                                                                |
+| sanoid                      | git repository                      | Class 1b — commit pin resolved from the release tag                                                                             |
 
 Static LICENSE pins change only when the license text does; verification
 then hard-fails until a human re-pins deliberately.
@@ -45,7 +46,8 @@ then hard-fails until a human re-pins deliberately.
 
 - **Pinning** — `scripts/lib/common.sh`: `check_pypi` / `check_cpan`
   (registry digests), `check_github_release_pinned` (commit pins), and the
-  Arch-recipe read in `scripts/packages/nvidia-proprietary-dkms.sh`. All
+  Arch-recipe reads in `scripts/packages/nvidia-proprietary-dkms.sh` and
+  `nvidia-open-dkms-pmstate.sh`. All
   pin paths verify their rewrite landed.
 - **Verification** — `scripts/lint.sh` runs `makepkg --verifysource` for
   every package on every build; any mismatch fails the run.

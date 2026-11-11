@@ -1,0 +1,76 @@
+# Maintainer: Mark Wells <contact at markwells dot dev>
+# Arch's nvidia-open-dkms plus one patch: the per-GPU procfs power file also
+# reports the driver's runtime-D3 state, reference count and last idle check
+# (see the patch's header). The driver keeps all three but publishes none,
+# and every other way to ask whether the dGPU is busy wakes it or keeps it
+# awake. carbon's waybar system bar (chezmoi, dot_config/waybar/scripts/
+# executable_sysbar) reads them to query the dGPU only while it is in use.
+#
+# The rest mirrors package_nvidia-open-dkms() in Arch's nvidia-utils recipe,
+# which ships NVIDIA's tarball unpatched. When the patch stops applying, the
+# build fails here (--fuzz=0) and the published package keeps its
+# nvidia-utils pin, so pacman holds nvidia-utils back until the patch is
+# refreshed.
+pkgname=nvidia-open-dkms-pmstate
+pkgver=615.78.08
+pkgrel=1
+pkgdesc="NVIDIA open kernel modules (DKMS), reporting runtime power state in procfs"
+arch=('x86_64')
+url="https://github.com/NVIDIA/open-gpu-kernel-modules"
+license=('MIT AND GPL-2.0-only')
+depends=('dkms')
+provides=("nvidia-open-dkms=${pkgver}" "nvidia-open=${pkgver}" 'NVIDIA-MODULE' 'nvidia-dkms')
+conflicts=('nvidia-open-dkms' 'nvidia-open' 'NVIDIA-MODULE')
+options=('!strip' '!debug')
+_pkg="NVIDIA-kernel-module-source-${pkgver}"
+source=("https://download.nvidia.com/XFree86/NVIDIA-kernel-module-source/${_pkg}.tar.xz"
+    'dynamic-power-procfs.patch')
+sha512sums=('5ced2c7e3e9df21f8494ea439ac2103307fcbcb295a3f11e5fdf4f1dbeda3f0b13800a06f8147ebd064f98897c24e92f5de82023a8ca43a582694d951c9620c9'
+    'f22fe6498320fddd120e59f4c80c0249c871dc2018870e82fbb77db12780991a1771ad0b9267d48af267a536d3035fbd4ebc0ea87627b6cc87f612af4d8cb91d')
+
+prepare() {
+    cd "${_pkg}"
+
+    patch -Np1 --fuzz=0 -i "${srcdir}/dynamic-power-procfs.patch"
+
+    # From here on, as Arch's prepare() does for this tarball.
+    sed -i "s/^  HOSTNAME.*/  HOSTNAME = echo archlinux/" utils.mk
+    sed -i "s/^WHOAMI.*/WHOAMI = echo archlinux-builder/" utils.mk
+    sed -i "s/^DATE.*/DATE = date -r version.mk/" utils.mk
+
+    local conf=kernel-open/dkms.conf
+    sed -i "s/__VERSION_STRING/${pkgver}/" "$conf"
+    # shellcheck disable=SC2016
+    sed -i 's/__JOBS/`nproc`/' "$conf"
+    sed -i 's/__EXCLUDE_MODULES//' "$conf"
+    sed -i 's/__DKMS_MODULES//' "$conf"
+    sed -i 's/NV_EXCLUDE_BUILD_MODULES/IGNORE_PREEMPT_RT_PRESENCE=1 NV_EXCLUDE_BUILD_MODULES/' "$conf"
+    sed -i '$i\
+BUILT_MODULE_NAME[0]="nvidia"\
+DEST_MODULE_LOCATION[0]="/kernel/drivers/video"\
+BUILT_MODULE_NAME[1]="nvidia-uvm"\
+DEST_MODULE_LOCATION[1]="/kernel/drivers/video"\
+BUILT_MODULE_NAME[2]="nvidia-modeset"\
+DEST_MODULE_LOCATION[2]="/kernel/drivers/video"\
+BUILT_MODULE_NAME[3]="nvidia-drm"\
+DEST_MODULE_LOCATION[3]="/kernel/drivers/video"\
+BUILT_MODULE_NAME[4]="nvidia-peermem"\
+DEST_MODULE_LOCATION[4]="/kernel/drivers/video"' "$conf"
+    cat << EOF >> "$conf"
+BUILT_MODULE_LOCATION[0]="kernel-open"
+BUILT_MODULE_LOCATION[1]="kernel-open"
+BUILT_MODULE_LOCATION[2]="kernel-open"
+BUILT_MODULE_LOCATION[3]="kernel-open"
+BUILT_MODULE_LOCATION[4]="kernel-open"
+EOF
+}
+
+package() {
+    depends+=("nvidia-utils=${pkgver}")
+
+    install -dm755 "${pkgdir}/usr/src"
+    cp -dr --no-preserve='ownership' "${_pkg}" "${pkgdir}/usr/src/nvidia-${pkgver}"
+    mv "${pkgdir}/usr/src/nvidia-${pkgver}/kernel-open/dkms.conf" "${pkgdir}/usr/src/nvidia-${pkgver}/dkms.conf"
+
+    install -Dm644 "${_pkg}/COPYING" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

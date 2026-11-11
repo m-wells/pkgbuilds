@@ -9,6 +9,7 @@ pkg/
 # Downloaded sources (makepkg)
 pkgs/**/*.tar.gz
 pkgs/**/*.tgz
+pkgs/**/*.tar.xz
 pkgs/**/*.AppImage
 pkgs/**/*.policy
 pkgs/**/*-linux-amd64
