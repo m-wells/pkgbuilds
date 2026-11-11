@@ -1,6 +1,10 @@
 # Maintainer: Mark Wells <contact at markwells dot dev>
 # Proprietary NVIDIA kernel modules built from the official .run installer.
-# Workaround for GSP heartbeat bug in nvidia-open:
+# carbon runs these instead of nvidia-open, which logged GSP heartbeat
+# timeouts there (595.58.03, 2026-05/06) at most logins and during sessions,
+# costing seconds each; the ~50 s boot stall first blamed on it was reflector.
+# Evidence and a retest plan: homelab issues/carbon-nvidia-open-gsp-heartbeat.md.
+# Upstream #1064 logs the same messages on other hardware (Blackwell, S0ix):
 # https://github.com/NVIDIA/open-gpu-kernel-modules/issues/1064
 pkgname=nvidia-proprietary-dkms
 pkgver=615.78.08
