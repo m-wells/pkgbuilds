@@ -1,0 +1,177 @@
+Report the runtime-D3 state in /proc/driver/nvidia/gpus/<id>/power
+
+The driver tracks whether a GPU is in use or idle (nv_dynamic_power_t in
+nv-priv.h) and decides from it when to suspend the GPU, but publishes none
+of it: its log of the transitions is NV_PRINTF(LEVEL_INFO), compiled out of
+release builds, and the kernel only sees pm_runtime get/put. Everything
+else that could tell a monitor "busy or idle" (nvidia-smi, PCI config space
+and link speed) wakes a suspended GPU, and an RM call from a monitor resets
+an idle GPU's countdown to suspend. This appends three lines to the power
+file, which already takes the RM API and GPU locks, and which did not wake
+a suspended GPU when read every 10 ms (RTX 4080 Laptop, 615.78.08):
+
+  Dynamic Power Management:
+   State:                     IN_USE | IDLE_INSTANT | IDLE_SUSTAINED | IDLE_INDICATED
+   References:                <n>
+   Last Idle Check:           idle|busy, <ms> ms ago   (or "none")
+
+State and References are the existing dynamic_power.state and .refcount.
+The last idle check is new: every idleness test (the periodic precondition
+check, the recheck before indicating idle) goes through
+RmCanEnterGcxUnderGpuLock(), so the original is renamed
+RmCanEnterGcxUnderGpuLockUnrecorded() and a wrapper of the old name records
+its result and time in two new nv_dynamic_power_t fields. That is what
+tells graphics work, which submits through user-mode doorbells and holds no
+reference, apart from an idle GPU counting down: both read IDLE_INSTANT.
+
+Five edits, so a refresh for a new driver can redo them by hand when this
+stops applying (the PKGBUILD applies it with --fuzz=0):
+  1. nv_power_info_t gains four fields, in BOTH copies of nv.h
+     (kernel-open/common/inc and src/nvidia/arch/nvalloc/unix/include);
+     the two halves of the driver must agree on its layout.
+  2. nv_dynamic_power_t (nv-priv.h) gains last_idle_check_idle/_ns.
+  3. dynamic-power.c: the rename and wrapper above.
+  4. rm_get_power_info() fills the new fields under its existing locks.
+  5. nv_procfs_read_power() prints them after the existing lines.
+
+--- a/kernel-open/common/inc/nv.h
++++ b/kernel-open/common/inc/nv.h
+@@ -783,6 +783,10 @@
+     const char *gcoff_support;
+     const char *s0ix_status;
+     const char *db_support;
++    const char *dynamic_power_state;
++    NvS32       dynamic_power_refcount;
++    const char *idle_check_result;
++    NvU64       idle_check_age_ms;  /* ~0: no idle check yet */
+ } nv_power_info_t;
+ 
+ typedef enum
+--- a/src/nvidia/arch/nvalloc/unix/include/nv.h
++++ b/src/nvidia/arch/nvalloc/unix/include/nv.h
+@@ -783,6 +783,10 @@
+     const char *gcoff_support;
+     const char *s0ix_status;
+     const char *db_support;
++    const char *dynamic_power_state;
++    NvS32       dynamic_power_refcount;
++    const char *idle_check_result;
++    NvU64       idle_check_age_ms;  /* ~0: no idle check yet */
+ } nv_power_info_t;
+ 
+ typedef enum
+--- a/src/nvidia/arch/nvalloc/unix/include/nv-priv.h
++++ b/src/nvidia/arch/nvalloc/unix/include/nv-priv.h
+@@ -293,6 +293,14 @@
+      * NVreg_DynamicPowerManagement regkey value set by the user
+      */
+     NvU32 dynamic_power_regkey;
++
++    /*
++     * Result and monotonic time (ns, 0 = never) of the last idle check, made
++     * by RmCanEnterGcxUnderGpuLock() under the GPU lock.  Reported in the
++     * per-GPU procfs power file.
++     */
++    NvBool last_idle_check_idle;
++    NvU64 last_idle_check_ns;
+ } nv_dynamic_power_t;
+ 
+ typedef struct
+--- a/src/nvidia/arch/nvalloc/unix/src/dynamic-power.c
++++ b/src/nvidia/arch/nvalloc/unix/src/dynamic-power.c
+@@ -287,7 +287,7 @@
+  *
+  * @return      TRUE if the GPU appears to be currently idle; FALSE otherwise.
+  */
+-static NvBool RmCanEnterGcxUnderGpuLock(
++static NvBool RmCanEnterGcxUnderGpuLockUnrecorded(
+     OBJGPU *pGpu
+ )
+ {
+@@ -324,6 +324,25 @@
+ }
+ 
+ /*!
++ * @brief: RmCanEnterGcxUnderGpuLockUnrecorded(), recording the result and
++ * its time for the procfs power file.
++ *
++ * Assumes the GPU lock is held.
++ */
++static NvBool RmCanEnterGcxUnderGpuLock(
++    OBJGPU *pGpu
++)
++{
++    nv_priv_t *nvp   = NV_GET_NV_PRIV(NV_GET_NV_STATE(pGpu));
++    NvBool     bIdle = RmCanEnterGcxUnderGpuLockUnrecorded(pGpu);
++
++    nvp->dynamic_power.last_idle_check_idle = bIdle;
++    nvp->dynamic_power.last_idle_check_ns   = osGetMonotonicTimeNs();
++
++    return bIdle;
++}
++
++/*!
+  * @brief: Check the feasibility of GPU engaging in a GCx cycle.
+  *
+  * Takes the GPU lock.
+@@ -3227,6 +3246,10 @@
+     const char       *pDynamicPowerStatus = "?";
+     const char       *pS0ixStatus = "?";
+     const char       *pDbStatus = "?";
++    const char       *pDynamicPowerState = "?";
++    NvS32             dynamicPowerRefcount = -1;
++    const char       *pIdleCheckResult = "?";
++    NvU64             idleCheckAgeMs = ~(NvU64)0;  // no check yet
+ 
+     NV_ENTER_RM_RUNTIME(sp,fp);
+     threadStateInit(&threadState, THREAD_STATE_FLAGS_NONE);
+@@ -3251,6 +3274,18 @@
+             pGcoffSupported = RmGetGpuGcxSupport(pGpu, NV_FALSE);
+             pS0ixStatus = pNvp->s0ix_pm_enabled ? "Enabled" : "Disabled";
+             pDbStatus = RmGetDynamicBoostSupport(pNv);
++            pDynamicPowerState = nv_dynamic_power_state_string(pNvp->dynamic_power.state);
++            dynamicPowerRefcount = pNvp->dynamic_power.refcount;
++            if (pNvp->dynamic_power.last_idle_check_ns == 0)
++            {
++                pIdleCheckResult = "none";
++            }
++            else
++            {
++                pIdleCheckResult = pNvp->dynamic_power.last_idle_check_idle ? "idle" : "busy";
++                idleCheckAgeMs = (osGetMonotonicTimeNs() -
++                                  pNvp->dynamic_power.last_idle_check_ns) / 1000000;
++            }
+             // UNLOCK: release per device lock
+             rmGpuGroupLockRelease(gpuMask, GPUS_LOCK_FLAGS_NONE);
+         }
+@@ -3268,5 +3303,9 @@
+     powerInfo->gcoff_support = pGcoffSupported;
+     powerInfo->s0ix_status = pS0ixStatus;
+     powerInfo->db_support = pDbStatus;
++    powerInfo->dynamic_power_state = pDynamicPowerState;
++    powerInfo->dynamic_power_refcount = dynamicPowerRefcount;
++    powerInfo->idle_check_result = pIdleCheckResult;
++    powerInfo->idle_check_age_ms = idleCheckAgeMs;
+ }
+ 
+--- a/kernel-open/nvidia/nv-procfs.c
++++ b/kernel-open/nvidia/nv-procfs.c
+@@ -221,7 +221,17 @@
+     seq_printf(s, " Platform Support:          %s\n",
+                nv_platform_supports_s0ix() ? "Supported" : "Not Supported");
+     seq_printf(s, " Status:                    %s\n\n", power_info.s0ix_status);
+-    seq_printf(s, "Notebook Dynamic Boost:     %s\n", power_info.db_support);
++    seq_printf(s, "Notebook Dynamic Boost:     %s\n\n", power_info.db_support);
++
++    seq_printf(s, "Dynamic Power Management:\n");
++    seq_printf(s, " State:                     %s\n", power_info.dynamic_power_state);
++    seq_printf(s, " References:                %d\n", power_info.dynamic_power_refcount);
++    if (power_info.idle_check_age_ms != ~(NvU64)0)
++        seq_printf(s, " Last Idle Check:           %s, %llu ms ago\n",
++                   power_info.idle_check_result,
++                   (unsigned long long)power_info.idle_check_age_ms);
++    else
++        seq_printf(s, " Last Idle Check:           %s\n", power_info.idle_check_result);
+ 
+     nv_kmem_cache_free_stack(sp);
+     return 0;
