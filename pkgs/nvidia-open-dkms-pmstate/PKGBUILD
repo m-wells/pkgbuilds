@@ -7,10 +7,13 @@
 # executable_sysbar) reads them to query the dGPU only while it is in use.
 #
 # The rest mirrors package_nvidia-open-dkms() in Arch's nvidia-utils recipe,
-# which ships NVIDIA's tarball unpatched. When the patch stops applying, the
-# build fails here (--fuzz=0) and the published package keeps its
-# nvidia-utils pin, so pacman holds nvidia-utils back until the patch is
-# refreshed.
+# which ships NVIDIA's tarball unpatched. package() pins nvidia-utils to this
+# pkgver, so once Arch ships a newer nvidia-utils, `pacman -Syu` refuses the
+# whole upgrade ("breaks dependency") until this package catches up: briefly
+# after each release, while the update bot bumps it and CI rebuilds it, and
+# until the patch is refreshed if it no longer applies, as the build then
+# fails here (--fuzz=0). `pacman -Syu --ignore nvidia-utils` upgrades the
+# rest meanwhile.
 pkgname=nvidia-open-dkms-pmstate
 pkgver=615.78.08
 pkgrel=1
