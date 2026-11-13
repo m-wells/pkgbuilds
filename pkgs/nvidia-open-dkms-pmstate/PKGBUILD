@@ -15,7 +15,7 @@
 # fails here (--fuzz=0). `pacman -Syu --ignore nvidia-utils` upgrades the
 # rest meanwhile.
 pkgname=nvidia-open-dkms-pmstate
-pkgver=615.78.08
+pkgver=620.70.06
 pkgrel=1
 pkgdesc="NVIDIA open kernel modules (DKMS), reporting runtime power state in procfs"
 arch=('x86_64')
@@ -28,8 +28,7 @@ options=('!strip' '!debug')
 _pkg="NVIDIA-kernel-module-source-${pkgver}"
 source=("https://download.nvidia.com/XFree86/NVIDIA-kernel-module-source/${_pkg}.tar.xz"
     'dynamic-power-procfs.patch')
-sha512sums=('5ced2c7e3e9df21f8494ea439ac2103307fcbcb295a3f11e5fdf4f1dbeda3f0b13800a06f8147ebd064f98897c24e92f5de82023a8ca43a582694d951c9620c9'
-    'f22fe6498320fddd120e59f4c80c0249c871dc2018870e82fbb77db12780991a1771ad0b9267d48af267a536d3035fbd4ebc0ea87627b6cc87f612af4d8cb91d')
+sha512sums=('fcf9d9640fe8d0a282e92471371dd35ab5b78d0ee40388e32a9c23211d52d793dbee5228599c22e6d5939169f3ce5b9854cea060e05e5262b9cebb865ad33df3' 'f22fe6498320fddd120e59f4c80c0249c871dc2018870e82fbb77db12780991a1771ad0b9267d48af267a536d3035fbd4ebc0ea87627b6cc87f612af4d8cb91d')
 
 prepare() {
     cd "${_pkg}"
