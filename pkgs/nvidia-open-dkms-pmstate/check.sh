@@ -40,3 +40,17 @@ for line in 'Dynamic Power Management:' ' Last Idle Check:           %s, %llu ms
         exit 1
     fi
 done
+
+# kthread-init-fs-sysfs-config.patch compiles in only where the kernel exports
+# userspace_init_fs (Linux 7.3+). Where it does, nvidia.ko imports the symbol;
+# its absence there means the conftest missed it and runtime D3 stays broken.
+if grep -q '\buserspace_init_fs\b' "$kbuild/Module.symvers"; then
+    if grep -qaF -- 'userspace_init_fs' "$src/kernel-open/nvidia.ko"; then
+        echo "nvidia.ko imports userspace_init_fs (7.3 sysfs-config fix compiled in)"
+    else
+        echo "Error: $kbuild exports userspace_init_fs but nvidia.ko does not use it"
+        exit 1
+    fi
+else
+    echo "Skipping the 7.3 sysfs-config check: $kbuild predates userspace_init_fs"
+fi

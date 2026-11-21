@@ -34,7 +34,7 @@ Every package is Class 1 (published claim) or Class 1b (content-addressed)
 | keeper-commander            | PyPI sdist                          | Class 1 — PyPI's published digest (+ tag-pinned LICENSE, static)                                                                |
 | keeper-secrets-manager-core | PyPI sdist                          | Class 1 — PyPI's published digest                                                                                               |
 | nvidia-proprietary-dkms     | NVIDIA `.run` installer             | Class 1 — sha512 claim from Arch's `nvidia-utils` packaging recipe (`.SRCINFO`)                                                 |
-| nvidia-open-dkms-pmstate    | NVIDIA kernel-module source tarball | Class 1 — sha512 claim from Arch's `nvidia-utils` packaging recipe (`.SRCINFO`); the patch is this repo's own, pinned beside it |
+| nvidia-open-dkms-pmstate    | NVIDIA kernel-module source tarball | Class 1 — sha512 claim from Arch's `nvidia-utils` packaging recipe (`.SRCINFO`); its two patches are pinned beside it: the procfs one is this repo's own, the Linux 7.3 runtime-D3 one is NVIDIA PR 1512 at commit `c66b7b8` |
 | perl-config-inifiles        | CPAN dist tarball                   | Class 1 — MetaCPAN `checksum_sha256` (legacy sha512 pin converts at next bump)                                                  |
 | python-pyngrok              | PyPI sdist                          | Class 1 — PyPI's published digest (+ tag-pinned LICENSE, static)                                                                |
 | sanoid                      | git repository                      | Class 1b — commit pin resolved from the release tag                                                                             |

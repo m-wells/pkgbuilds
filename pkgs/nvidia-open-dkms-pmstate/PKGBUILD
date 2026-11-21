@@ -1,10 +1,15 @@
 # Maintainer: Mark Wells <contact at markwells dot dev>
-# Arch's nvidia-open-dkms plus one patch: the per-GPU procfs power file also
-# reports the driver's runtime-D3 state, reference count and last idle check
-# (see the patch's header). The driver keeps all three but publishes none,
+# Arch's nvidia-open-dkms plus two patches. dynamic-power-procfs.patch: the
+# per-GPU procfs power file also reports the driver's runtime-D3 state,
+# reference count and last idle check (see the patch's header). The driver keeps all three but publishes none,
 # and every other way to ask whether the dGPU is busy wakes it or keeps it
 # awake. carbon's waybar system bar (chezmoi, dot_config/waybar/scripts/
 # executable_sysbar) reads them to query the dGPU only while it is in use.
+#
+# kthread-init-fs-sysfs-config.patch: NVIDIA's unmerged fix (PR 1512) for
+# runtime D3 reading "Not supported" on Linux 7.3, which left carbon's dGPU
+# awake for good. Temporary: drop it when a release carries the fix (it then
+# stops applying and the build fails, as below).
 #
 # The rest mirrors package_nvidia-open-dkms() in Arch's nvidia-utils recipe,
 # which ships NVIDIA's tarball unpatched. package() pins nvidia-utils to this
@@ -16,7 +21,7 @@
 # rest meanwhile.
 pkgname=nvidia-open-dkms-pmstate
 pkgver=620.73.04
-pkgrel=1
+pkgrel=2
 pkgdesc="NVIDIA open kernel modules (DKMS), reporting runtime power state in procfs"
 arch=('x86_64')
 url="https://github.com/NVIDIA/open-gpu-kernel-modules"
@@ -27,13 +32,15 @@ conflicts=('nvidia-open-dkms' 'nvidia-open' 'NVIDIA-MODULE')
 options=('!strip' '!debug')
 _pkg="NVIDIA-kernel-module-source-${pkgver}"
 source=("https://download.nvidia.com/XFree86/NVIDIA-kernel-module-source/${_pkg}.tar.xz"
-    'dynamic-power-procfs.patch')
-sha512sums=('522401015644182271547bf4017ee9a078bb637afb4fb43e359fd9b679fead0a0d57c166a3d4ff7a8c37efaa050e378a962f3d219229e9959394d44692f91c1b' 'f22fe6498320fddd120e59f4c80c0249c871dc2018870e82fbb77db12780991a1771ad0b9267d48af267a536d3035fbd4ebc0ea87627b6cc87f612af4d8cb91d')
+    'dynamic-power-procfs.patch'
+    'kthread-init-fs-sysfs-config.patch')
+sha512sums=('522401015644182271547bf4017ee9a078bb637afb4fb43e359fd9b679fead0a0d57c166a3d4ff7a8c37efaa050e378a962f3d219229e9959394d44692f91c1b' 'f22fe6498320fddd120e59f4c80c0249c871dc2018870e82fbb77db12780991a1771ad0b9267d48af267a536d3035fbd4ebc0ea87627b6cc87f612af4d8cb91d' 'f3280f320d86984ee09005891366d322f8c84e2e110987dd31c26977ee29b6f970b8b08aec6573f9e88bd2a7a6d40979c51f87d5f851e1c8e298fbb04d809187')
 
 prepare() {
     cd "${_pkg}"
 
     patch -Np1 --fuzz=0 -i "${srcdir}/dynamic-power-procfs.patch"
+    patch -Np1 --fuzz=0 -i "${srcdir}/kthread-init-fs-sysfs-config.patch"
 
     # From here on, as Arch's prepare() does for this tarball.
     sed -i "s/^  HOSTNAME.*/  HOSTNAME = echo archlinux/" utils.mk
