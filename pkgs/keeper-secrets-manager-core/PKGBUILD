@@ -1,7 +1,7 @@
 # Maintainer: Mark Wells <contact at markwells dot dev>
 # shellcheck shell=bash disable=SC2034,SC2154,SC2164
 pkgname=keeper-secrets-manager-core
-pkgver=17.3.0
+pkgver=18.0.0
 pkgrel=1
 pkgdesc="Keeper Secrets Manager SDK core module"
 arch=('any')
@@ -21,7 +21,7 @@ makedepends=(
 )
 source=("https://files.pythonhosted.org/packages/source/k/keeper_secrets_manager_core/keeper_secrets_manager_core-$pkgver.tar.gz")
 # Pinned from PyPI's published digest for this exact sdist (see PROVENANCE.md).
-sha256sums=('dbd3c2b2160a92aed46c2f5355cbd793492f43ba260379d78957e7ad75a96acf')
+sha256sums=('bff8bd891f9f3cb654526ef4ba48d741127f73d786f5bda6dee620d2caec9550')
 
 build() {
     cd "keeper_secrets_manager_core-$pkgver"
